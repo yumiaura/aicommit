@@ -5,7 +5,7 @@ import argparse
 import sys
 from typing import Any
 
-from aicommit import __version__, git, ui
+from aicommit import __version__, clipboard, git, ui
 from aicommit import config as cfgmod
 from aicommit import diff as diffmod
 from aicommit.commands import changelog as changelog_cmd
@@ -32,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--style", choices=["conventional", "plain"])
     p.add_argument("--no-body", action="store_true")
     p.add_argument("--print", action="store_true", dest="print_only")
+    p.add_argument(
+        "--copy",
+        action="store_true",
+        help="copy the generated commit message to the clipboard and exit without committing",
+    )
     p.add_argument("-y", "--yes", action="store_true")
     p.add_argument(
         "--review",
@@ -172,7 +177,7 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
     # In print/pipe mode, stream by default — gives interactive feel even
     # though we're just dumping to stdout. Interactive mode buffers so the
     # boxed proposal renders cleanly.
-    if from_stdin or args.print_only:
+    if from_stdin or args.print_only or args.copy:
         if args.no_stream or not hasattr(backend, "stream"):
             message = ask()
             if not message:
@@ -184,6 +189,13 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
             if not message:
                 sys.stderr.write("error: empty response from LLM\n")
                 return 2
+        if args.copy:
+            try:
+                tool = clipboard.copy_to_clipboard(message)
+            except clipboard.ClipboardError as e:
+                sys.stderr.write(f"error: could not copy to clipboard: {e}\n")
+                return 3
+            sys.stderr.write(f"copied commit message to clipboard via {tool}\n")
         return 0
 
     message = ask()

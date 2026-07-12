@@ -47,3 +47,44 @@ def test_review_only_with_findings_exits_1(isolated_home, cassette, monkeypatch,
     monkeypatch.setattr("sys.stdin.isatty", lambda: False, raising=False)
     rc = cli.main(["--review-only"])
     assert rc == 1
+
+
+def test_copy_mode_emits_and_copies_message(isolated_home, cassette, monkeypatch, capsys):
+    cassette("commit_simple")
+    monkeypatch.setattr("sys.stdin", io.StringIO("diff --git a/x b/x\n+a\n"))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False, raising=False)
+
+    copied: dict[str, str] = {}
+
+    def fake_copy(text: str) -> str:
+        copied["text"] = text
+        return "test-clipboard"
+
+    monkeypatch.setattr("aicommit.clipboard.copy_to_clipboard", fake_copy)
+
+    rc = cli.main(["--copy", "--no-stream"])
+    captured = capsys.readouterr()
+
+    assert rc == 0
+    assert "feat(parser)" in captured.out
+    assert "feat(parser)" in copied["text"]
+    assert "copied commit message to clipboard via test-clipboard" in captured.err
+
+
+def test_copy_mode_reports_clipboard_failure(isolated_home, cassette, monkeypatch, capsys):
+    cassette("commit_simple")
+    monkeypatch.setattr("sys.stdin", io.StringIO("diff --git a/x b/x\n+a\n"))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False, raising=False)
+
+    def fail_copy(_: str) -> str:
+        from aicommit.clipboard import ClipboardError
+
+        raise ClipboardError("no clipboard command found")
+
+    monkeypatch.setattr("aicommit.clipboard.copy_to_clipboard", fail_copy)
+
+    rc = cli.main(["--copy", "--no-stream"])
+    err = capsys.readouterr().err
+
+    assert rc == 3
+    assert "could not copy to clipboard" in err
