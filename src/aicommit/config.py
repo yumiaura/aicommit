@@ -18,6 +18,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     "commit": {
         "style": "conventional",
         "include_body": True,
+        "validate": False,
+        "validate_max_retries": 2,
     },
     "review": {
         "enabled": False,
@@ -38,6 +40,8 @@ ENV_OVERRIDES: dict[str, tuple[str, str]] = {
     "AICOMMIT_MAX_TOKENS": ("llm", "max_tokens"),
     "AICOMMIT_STYLE": ("commit", "style"),
     "AICOMMIT_INCLUDE_BODY": ("commit", "include_body"),
+    "AICOMMIT_VALIDATE": ("commit", "validate"),
+    "AICOMMIT_VALIDATE_MAX_RETRIES": ("commit", "validate_max_retries"),
 }
 
 
@@ -50,6 +54,8 @@ class Config:
     llm_max_tokens: int
     commit_style: str
     commit_include_body: bool
+    commit_validate: bool
+    commit_validate_max_retries: int
     review_enabled: bool
     changelog_skip_conventional: bool
     sources: list[str] = field(default_factory=list)
@@ -147,6 +153,8 @@ def load(cli_overrides: dict[str, dict[str, Any]] | None = None) -> Config:
         llm_max_tokens=int(merged["llm"]["max_tokens"]),
         commit_style=str(merged["commit"]["style"]),
         commit_include_body=bool(merged["commit"]["include_body"]),
+        commit_validate=bool(merged["commit"]["validate"]),
+        commit_validate_max_retries=int(merged["commit"]["validate_max_retries"]),
         review_enabled=bool(merged["review"]["enabled"]),
         changelog_skip_conventional=bool(merged["changelog"]["skip_conventional"]),
         sources=sources,

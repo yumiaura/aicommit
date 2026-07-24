@@ -8,12 +8,13 @@ from typing import Any
 from aicommit import __version__, git, ui
 from aicommit import config as cfgmod
 from aicommit import diff as diffmod
+from aicommit import validate as validatemod
 from aicommit.commands import changelog as changelog_cmd
 from aicommit.commands import config as config_cmd
 from aicommit.commands import review as review_cmd
 from aicommit.git import GitError
 from aicommit.llm import LLMError, OllamaError, make_backend
-from aicommit.prompts import build_commit_prompt
+from aicommit.prompts import VALIDATE_CORRECTION_PROMPT, build_commit_prompt
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -32,6 +33,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--style", choices=["conventional", "plain"])
     p.add_argument("--no-body", action="store_true")
     p.add_argument("--print", action="store_true", dest="print_only")
+    p.add_argument(
+        "--validate",
+        action="store_true",
+        help="validate generated message against Conventional Commits and auto-correct",
+    )
     p.add_argument("-y", "--yes", action="store_true")
     p.add_argument(
         "--review",
@@ -84,6 +90,8 @@ def cli_overrides(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         commit["style"] = args.style
     if args.no_body:
         commit["include_body"] = False
+    if args.validate:
+        commit["validate"] = True
     if commit:
         overrides["commit"] = commit
     return overrides
@@ -191,6 +199,34 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
         sys.stderr.write("error: empty response from LLM\n")
         return 2
 
+    if cfg.commit_validate:
+        for attempt in range(cfg.commit_validate_max_retries + 1):
+            result = validatemod.validate_message(message, cfg.commit_style)
+            if result.is_valid:
+                if attempt > 0 and args.debug:
+                    sys.stderr.write("[debug] message validated after correction\n")
+                break
+            if attempt < cfg.commit_validate_max_retries:
+                if args.debug:
+                    sys.stderr.write(
+                        f"[debug] message invalid, attempting correction "
+                        f"({attempt + 1}/{cfg.commit_validate_max_retries})\n"
+                    )
+                correction_prompt = validatemod.build_correction_prompt(
+                    diff, message, result.errors, style=cfg.commit_style
+                )
+                temp = min(1.0, cfg.llm_temperature + 0.15 * (attempt + 1))
+                message = ask(temperature=temp)
+                if not message:
+                    sys.stderr.write("error: empty response from LLM\n")
+                    return 2
+        else:
+            for err in result.errors:
+                sys.stderr.write(f"warning: {err}\n")
+            sys.stderr.write(
+                "warning: using message as-is despite validation errors\n"
+            )
+
     if args.yes:
         try:
             git.commit_with_message(message)
@@ -208,7 +244,22 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
 
     def regenerate() -> str:
         state["temperature"] = min(1.0, state["temperature"] + 0.15)
-        return ask(temperature=state["temperature"])
+        msg = ask(temperature=state["temperature"])
+        if not msg:
+            return ""
+        if cfg.commit_validate:
+            for attempt in range(cfg.commit_validate_max_retries + 1):
+                r = validatemod.validate_message(msg, cfg.commit_style)
+                if r.is_valid:
+                    break
+                if attempt < cfg.commit_validate_max_retries:
+                    correction_prompt = validatemod.build_correction_prompt(
+                        diff, msg, r.errors, style=cfg.commit_style
+                    )
+                    msg = ask(temperature=state["temperature"])
+                    if not msg:
+                        return ""
+        return msg
 
     return ui.run_interactive(message, regenerate=regenerate)
 

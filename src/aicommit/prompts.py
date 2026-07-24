@@ -3,6 +3,24 @@ from __future__ import annotations
 
 from aicommit.diff import truncate_diff
 
+VALIDATE_CORRECTION_PROMPT = """The commit message below is not a valid Conventional Commit.
+Fix it so it follows this format:
+  type[(scope)][!]: description
+
+Valid types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert, security, deprecate
+
+Invalid message:
+{message}
+
+Errors:
+{errors}
+
+Diff:
+---
+{diff}
+---
+Output ONLY the corrected commit message. No preamble, no fences."""
+
 # Default budget for the diff portion of a commit prompt (in tokens).
 # Leaves room for the system + rules + the LLM's response inside a typical
 # 4k–8k context window.
