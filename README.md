@@ -12,6 +12,7 @@ Everything runs offline. No API keys, no data leaves the box.
 - 📝 Generates **Conventional Commit** messages from staged changes
 - 🤖 Powered by a **local LLM** via Ollama (or `llama-cpp-python`)
 - ✍️ Opens the proposal in `$EDITOR` for a quick approval / edit / regenerate loop
+- 📋 `--copy` mode: generate a message, copy it to the clipboard, and exit
 - 📓 `changelog` subcommand: summarizes a tag range into a `CHANGELOG.md` entry
 - 🔌 Installs as a `git` subcommand — call it as `git aicommit`
 
@@ -101,10 +102,19 @@ Useful flags:
 aicommit [--backend {ollama,llama-cpp}] [--model M] [--url URL]
          [--temperature T] [--max-tokens N]
          [--style {conventional,plain}] [--no-body]
-         [--review] [--review-only]
+         [--review] [--review-only] [--copy]
          [--print] [--no-stream] [-y/--yes] [--debug] [--version]
 aicommit changelog <rev-range> [--out CHANGELOG.md]
 aicommit config
+```
+
+Copy mode is useful when you want the generated message but still plan to commit
+from another tool:
+
+```bash
+git add -A
+git aicommit --copy
+git commit
 ```
 
 ---
