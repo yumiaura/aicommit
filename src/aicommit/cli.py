@@ -38,6 +38,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="validate generated message against Conventional Commits and auto-correct",
     )
+    p.add_argument(
+        "--suggestions",
+        action="store_true",
+        help="show multiple commit message suggestions to choose from",
+    )
+    p.add_argument(
+        "--num-suggestions",
+        type=int,
+        dest="suggestions_count",
+        help="number of suggestions to generate (default 3)",
+    )
     p.add_argument("-y", "--yes", action="store_true")
     p.add_argument(
         "--review",
@@ -92,6 +103,10 @@ def cli_overrides(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         commit["include_body"] = False
     if args.validate:
         commit["validate"] = True
+    if args.suggestions:
+        commit["suggestions"] = True
+    if args.suggestions_count is not None:
+        commit["suggestions_count"] = args.suggestions_count
     if commit:
         overrides["commit"] = commit
     return overrides
@@ -212,6 +227,37 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
             )
         return msg
 
+    use_suggestions = cfg.commit_suggestions and not from_stdin and not args.print_only
+    suggestions_count = cfg.commit_suggestions_count
+
+    def generate_one(temp: float) -> str:
+        msg = ask(temperature=temp)
+        if not msg:
+            return ""
+        if cfg.commit_validate:
+            msg = validate_and_correct(msg)
+        return msg
+
+    def generate_suggestions(count: int, *, temp_offset: float = 0.0) -> list[str]:
+        messages: list[str] = []
+        for i in range(count):
+            temp = min(1.0, cfg.llm_temperature + 0.2 * i + temp_offset)
+            if args.debug:
+                sys.stderr.write(
+                    f"[debug] generating suggestion {i + 1}/{count} "
+                    f"(temperature={temp:.2f})\n"
+                )
+            msg = ask(temperature=temp)
+            if not msg:
+                sys.stderr.write("error: empty response from LLM\n")
+                return []
+            if cfg.commit_validate:
+                msg = validate_and_correct(msg, attempt_offset=i)
+                if not msg:
+                    return []
+            messages.append(msg)
+        return messages
+
     # In print/pipe mode, stream by default — gives interactive feel even
     # though we're just dumping to stdout. Interactive mode buffers so the
     # boxed proposal renders cleanly.
@@ -232,18 +278,23 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
                 return 2
         return 0
 
-    message = ask()
-    if not message:
-        sys.stderr.write("error: empty response from LLM\n")
-        return 2
-
-    message = validate_and_correct(message)
-    if not message:
-        return 2
+    if use_suggestions:
+        proposals = generate_suggestions(suggestions_count)
+        if not proposals:
+            return 2
+    else:
+        message = ask()
+        if not message:
+            sys.stderr.write("error: empty response from LLM\n")
+            return 2
+        message = validate_and_correct(message)
+        if not message:
+            return 2
 
     if args.yes:
+        msg_to_commit = proposals[0] if use_suggestions else message
         try:
-            git.commit_with_message(message)
+            git.commit_with_message(msg_to_commit)
         except Exception as e:
             sys.stderr.write(f"error: git commit failed: {e}\n")
             return 1
@@ -254,11 +305,20 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
     except GitError:
         pass
 
-    state = {"temperature": cfg.llm_temperature}
+    if use_suggestions:
+        sug_state: dict[str, float] = {"temp_offset": 0.0}
+
+        def regenerate_suggestions() -> list[str]:
+            sug_state["temp_offset"] = min(1.0, sug_state["temp_offset"] + 0.15)
+            return generate_suggestions(suggestions_count, temp_offset=sug_state["temp_offset"])
+
+        return ui.run_suggestion_interactive(proposals, regenerate=regenerate_suggestions)
+
+    regen_state: dict[str, float] = {"temperature": cfg.llm_temperature}
 
     def regenerate() -> str:
-        state["temperature"] = min(1.0, state["temperature"] + 0.15)
-        msg = ask(temperature=state["temperature"])
+        regen_state["temperature"] = min(1.0, regen_state["temperature"] + 0.15)
+        msg = ask(temperature=regen_state["temperature"])
         if not msg:
             return ""
         if cfg.commit_validate:
