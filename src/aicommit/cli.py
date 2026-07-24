@@ -14,7 +14,7 @@ from aicommit.commands import config as config_cmd
 from aicommit.commands import review as review_cmd
 from aicommit.git import GitError
 from aicommit.llm import LLMError, OllamaError, make_backend
-from aicommit.prompts import VALIDATE_CORRECTION_PROMPT, build_commit_prompt
+from aicommit.prompts import build_commit_prompt
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -159,9 +159,10 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
         include_body=cfg.commit_include_body,
     )
 
-    def ask(temperature: float | None = None) -> str:
+    def ask(temperature: float | None = None, *, correction_prompt: str | None = None) -> str:
+        p = correction_prompt if correction_prompt is not None else prompt
         try:
-            return backend.generate(prompt, temperature=temperature)
+            return backend.generate(p, temperature=temperature)
         except OllamaError as e:
             raise SystemExit(emit_ollama_error(e)) from e
 
@@ -177,6 +178,40 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
         sys.stdout.write("\n")
         return "".join(chunks).strip()
 
+    def validate_and_correct(msg: str, *, attempt_offset: int = 0) -> str:
+        if not cfg.commit_validate:
+            return msg
+        for attempt in range(cfg.commit_validate_max_retries + 1):
+            result = validatemod.validate_message(msg, cfg.commit_style)
+            if result.is_valid:
+                if attempt > 0 and args.debug:
+                    sys.stderr.write("[debug] message validated after correction\n")
+                break
+            if attempt < cfg.commit_validate_max_retries:
+                if args.debug:
+                    sys.stderr.write(
+                        f"[debug] message invalid, attempting correction "
+                        f"({attempt + 1}/{cfg.commit_validate_max_retries})\n"
+                    )
+                corr_prompt = validatemod.build_correction_prompt(
+                    diff, msg, result.errors, style=cfg.commit_style
+                )
+                temp = min(
+                    1.0,
+                    cfg.llm_temperature + 0.15 * (attempt + 1 + attempt_offset),
+                )
+                msg = ask(temperature=temp, correction_prompt=corr_prompt)
+                if not msg:
+                    sys.stderr.write("error: empty response from LLM\n")
+                    return ""
+        else:
+            for err in result.errors:
+                sys.stderr.write(f"warning: {err}\n")
+            sys.stderr.write(
+                "warning: using message as-is despite validation errors\n"
+            )
+        return msg
+
     # In print/pipe mode, stream by default — gives interactive feel even
     # though we're just dumping to stdout. Interactive mode buffers so the
     # boxed proposal renders cleanly.
@@ -185,6 +220,9 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
             message = ask()
             if not message:
                 sys.stderr.write("error: empty response from LLM\n")
+                return 2
+            message = validate_and_correct(message)
+            if not message:
                 return 2
             print(message)
         else:
@@ -199,33 +237,9 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
         sys.stderr.write("error: empty response from LLM\n")
         return 2
 
-    if cfg.commit_validate:
-        for attempt in range(cfg.commit_validate_max_retries + 1):
-            result = validatemod.validate_message(message, cfg.commit_style)
-            if result.is_valid:
-                if attempt > 0 and args.debug:
-                    sys.stderr.write("[debug] message validated after correction\n")
-                break
-            if attempt < cfg.commit_validate_max_retries:
-                if args.debug:
-                    sys.stderr.write(
-                        f"[debug] message invalid, attempting correction "
-                        f"({attempt + 1}/{cfg.commit_validate_max_retries})\n"
-                    )
-                correction_prompt = validatemod.build_correction_prompt(
-                    diff, message, result.errors, style=cfg.commit_style
-                )
-                temp = min(1.0, cfg.llm_temperature + 0.15 * (attempt + 1))
-                message = ask(temperature=temp)
-                if not message:
-                    sys.stderr.write("error: empty response from LLM\n")
-                    return 2
-        else:
-            for err in result.errors:
-                sys.stderr.write(f"warning: {err}\n")
-            sys.stderr.write(
-                "warning: using message as-is despite validation errors\n"
-            )
+    message = validate_and_correct(message)
+    if not message:
+        return 2
 
     if args.yes:
         try:
@@ -248,17 +262,7 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
         if not msg:
             return ""
         if cfg.commit_validate:
-            for attempt in range(cfg.commit_validate_max_retries + 1):
-                r = validatemod.validate_message(msg, cfg.commit_style)
-                if r.is_valid:
-                    break
-                if attempt < cfg.commit_validate_max_retries:
-                    correction_prompt = validatemod.build_correction_prompt(
-                        diff, msg, r.errors, style=cfg.commit_style
-                    )
-                    msg = ask(temperature=state["temperature"])
-                    if not msg:
-                        return ""
+            msg = validate_and_correct(msg, attempt_offset=3)
         return msg
 
     return ui.run_interactive(message, regenerate=regenerate)

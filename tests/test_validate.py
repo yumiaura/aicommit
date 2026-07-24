@@ -5,7 +5,6 @@ import io
 
 from aicommit import validate as validatemod
 
-
 # ── validate_message ───────────────────────────────────────────────────
 
 
@@ -84,7 +83,7 @@ def test_body_line_too_long():
     body = "x" * 90
     r = validatemod.validate_message(f"feat: add stuff\n\n{body}")
     assert not r.is_valid
-    assert any("line 3" in e for e in r.errors)
+    assert any("line 2" in e and "90 chars" in e for e in r.errors)
 
 
 def test_body_within_length_is_fine():
