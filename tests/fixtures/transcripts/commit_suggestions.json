@@ -1,0 +1,14 @@
+[
+  {
+    "endpoint": "/api/generate",
+    "response": "feat(api): add authentication middleware"
+  },
+  {
+    "endpoint": "/api/generate",
+    "response": "refactor(api): simplify auth flow"
+  },
+  {
+    "endpoint": "/api/generate",
+    "response": "feat(auth): implement JWT validation"
+  }
+]

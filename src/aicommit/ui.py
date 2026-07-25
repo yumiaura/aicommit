@@ -120,12 +120,7 @@ def run_interactive(initial: str, *, regenerate: Callable[[], str]) -> int:
         print_proposal(message)
         choice = prompt_choice()
         if choice == "enter":
-            try:
-                git.commit_with_message(message)
-            except subprocess.CalledProcessError as e:
-                sys.stderr.write(f"error: git commit failed (rc={e.returncode})\n")
-                return e.returncode or 1
-            return 0
+            return _do_commit(message)
         if choice == "e":
             new = edit_message(message)
             if not new.strip():
@@ -137,6 +132,95 @@ def run_interactive(initial: str, *, regenerate: Callable[[], str]) -> int:
             try:
                 message = regenerate()
             except Exception as e:  # surfaced from backend
+                sys.stderr.write(f"error: {e}\n")
+                return 2
+            continue
+        if choice == "q":
+            sys.stderr.write("aborted by user\n")
+            return 130
+
+
+def _do_commit(message: str) -> int:
+    try:
+        git.commit_with_message(message)
+    except subprocess.CalledProcessError as e:
+        sys.stderr.write(f"error: git commit failed (rc={e.returncode})\n")
+        return e.returncode or 1
+    return 0
+
+
+# ── Multiple suggestions mode ──────────────────────────────────────────────
+
+
+def print_proposals(proposals: list[str]) -> None:
+    bar = "─" * 56
+    print(colored(bar, Ansi.DIM))
+    print(colored("proposed commit messages:", Ansi.BOLD))
+    print(colored(bar, Ansi.DIM))
+    for idx, msg in enumerate(proposals, start=1):
+        print(colored(f"{idx}.", Ansi.CYAN))
+        print(msg)
+        if idx < len(proposals):
+            print()
+    print(colored(bar, Ansi.DIM))
+
+
+def prompt_suggestion_choice(count: int) -> str:
+    nums = " · ".join(str(i) for i in range(1, count + 1))
+    print()
+    print(f"[ {nums} = select & commit · e = edit · r = regenerate · q = quit ]")
+    while True:
+        try:
+            raw = input("> ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return "q"
+        if raw == "":
+            return "enter"
+        if raw in {str(i) for i in range(1, count + 1)}:
+            return raw
+        if raw in {"e", "r", "q"}:
+            return raw
+        print(f"unknown choice {raw!r}")
+
+
+def prompt_edit_which(count: int) -> int | None:
+    try:
+        raw = input(f"edit which? [1-{count}] > ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print()
+        return None
+    if raw in {str(i) for i in range(1, count + 1)}:
+        return int(raw) - 1
+    return None
+
+
+def run_suggestion_interactive(
+    proposals: list[str],
+    *,
+    regenerate: Callable[[], list[str]],
+) -> int:
+    while True:
+        print_proposals(proposals)
+        choice = prompt_suggestion_choice(len(proposals))
+        if choice == "enter":
+            return _do_commit(proposals[0])
+        if choice in {str(i) for i in range(1, len(proposals) + 1)}:
+            return _do_commit(proposals[int(choice) - 1])
+        if choice == "e":
+            idx = prompt_edit_which(len(proposals))
+            if idx is None:
+                continue
+            new = edit_message(proposals[idx])
+            if not new.strip():
+                sys.stderr.write("aborted: empty message\n")
+                return 1
+            proposals[idx] = new
+            continue
+        if choice == "r":
+            try:
+                proposals = regenerate()
+            except Exception as e:
                 sys.stderr.write(f"error: {e}\n")
                 return 2
             continue

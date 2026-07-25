@@ -8,6 +8,7 @@ from typing import Any
 from aicommit import __version__, git, ui
 from aicommit import config as cfgmod
 from aicommit import diff as diffmod
+from aicommit import validate as validatemod
 from aicommit.commands import changelog as changelog_cmd
 from aicommit.commands import config as config_cmd
 from aicommit.commands import review as review_cmd
@@ -32,6 +33,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--style", choices=["conventional", "plain"])
     p.add_argument("--no-body", action="store_true")
     p.add_argument("--print", action="store_true", dest="print_only")
+    p.add_argument(
+        "--validate",
+        action="store_true",
+        help="validate generated message against Conventional Commits and auto-correct",
+    )
+    p.add_argument(
+        "--suggestions",
+        action="store_true",
+        help="show multiple commit message suggestions to choose from",
+    )
+    p.add_argument(
+        "--num-suggestions",
+        type=int,
+        dest="suggestions_count",
+        help="number of suggestions to generate (default 3)",
+    )
     p.add_argument("-y", "--yes", action="store_true")
     p.add_argument(
         "--review",
@@ -84,6 +101,12 @@ def cli_overrides(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
         commit["style"] = args.style
     if args.no_body:
         commit["include_body"] = False
+    if args.validate:
+        commit["validate"] = True
+    if args.suggestions:
+        commit["suggestions"] = True
+    if args.suggestions_count is not None:
+        commit["suggestions_count"] = args.suggestions_count
     if commit:
         overrides["commit"] = commit
     return overrides
@@ -151,9 +174,10 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
         include_body=cfg.commit_include_body,
     )
 
-    def ask(temperature: float | None = None) -> str:
+    def ask(temperature: float | None = None, *, correction_prompt: str | None = None) -> str:
+        p = correction_prompt if correction_prompt is not None else prompt
         try:
-            return backend.generate(prompt, temperature=temperature)
+            return backend.generate(p, temperature=temperature)
         except OllamaError as e:
             raise SystemExit(emit_ollama_error(e)) from e
 
@@ -169,6 +193,71 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
         sys.stdout.write("\n")
         return "".join(chunks).strip()
 
+    def validate_and_correct(msg: str, *, attempt_offset: int = 0) -> str:
+        if not cfg.commit_validate:
+            return msg
+        for attempt in range(cfg.commit_validate_max_retries + 1):
+            result = validatemod.validate_message(msg, cfg.commit_style)
+            if result.is_valid:
+                if attempt > 0 and args.debug:
+                    sys.stderr.write("[debug] message validated after correction\n")
+                break
+            if attempt < cfg.commit_validate_max_retries:
+                if args.debug:
+                    sys.stderr.write(
+                        f"[debug] message invalid, attempting correction "
+                        f"({attempt + 1}/{cfg.commit_validate_max_retries})\n"
+                    )
+                corr_prompt = validatemod.build_correction_prompt(
+                    diff, msg, result.errors, style=cfg.commit_style
+                )
+                temp = min(
+                    1.0,
+                    cfg.llm_temperature + 0.15 * (attempt + 1 + attempt_offset),
+                )
+                msg = ask(temperature=temp, correction_prompt=corr_prompt)
+                if not msg:
+                    sys.stderr.write("error: empty response from LLM\n")
+                    return ""
+        else:
+            for err in result.errors:
+                sys.stderr.write(f"warning: {err}\n")
+            sys.stderr.write(
+                "warning: using message as-is despite validation errors\n"
+            )
+        return msg
+
+    use_suggestions = cfg.commit_suggestions and not from_stdin and not args.print_only
+    suggestions_count = cfg.commit_suggestions_count
+
+    def generate_one(temp: float) -> str:
+        msg = ask(temperature=temp)
+        if not msg:
+            return ""
+        if cfg.commit_validate:
+            msg = validate_and_correct(msg)
+        return msg
+
+    def generate_suggestions(count: int, *, temp_offset: float = 0.0) -> list[str]:
+        messages: list[str] = []
+        for i in range(count):
+            temp = min(1.0, cfg.llm_temperature + 0.2 * i + temp_offset)
+            if args.debug:
+                sys.stderr.write(
+                    f"[debug] generating suggestion {i + 1}/{count} "
+                    f"(temperature={temp:.2f})\n"
+                )
+            msg = ask(temperature=temp)
+            if not msg:
+                sys.stderr.write("error: empty response from LLM\n")
+                return []
+            if cfg.commit_validate:
+                msg = validate_and_correct(msg, attempt_offset=i)
+                if not msg:
+                    return []
+            messages.append(msg)
+        return messages
+
     # In print/pipe mode, stream by default — gives interactive feel even
     # though we're just dumping to stdout. Interactive mode buffers so the
     # boxed proposal renders cleanly.
@@ -178,6 +267,9 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
             if not message:
                 sys.stderr.write("error: empty response from LLM\n")
                 return 2
+            message = validate_and_correct(message)
+            if not message:
+                return 2
             print(message)
         else:
             message = ask_stream()
@@ -186,14 +278,23 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
                 return 2
         return 0
 
-    message = ask()
-    if not message:
-        sys.stderr.write("error: empty response from LLM\n")
-        return 2
+    if use_suggestions:
+        proposals = generate_suggestions(suggestions_count)
+        if not proposals:
+            return 2
+    else:
+        message = ask()
+        if not message:
+            sys.stderr.write("error: empty response from LLM\n")
+            return 2
+        message = validate_and_correct(message)
+        if not message:
+            return 2
 
     if args.yes:
+        msg_to_commit = proposals[0] if use_suggestions else message
         try:
-            git.commit_with_message(message)
+            git.commit_with_message(msg_to_commit)
         except Exception as e:
             sys.stderr.write(f"error: git commit failed: {e}\n")
             return 1
@@ -204,11 +305,25 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
     except GitError:
         pass
 
-    state = {"temperature": cfg.llm_temperature}
+    if use_suggestions:
+        sug_state: dict[str, float] = {"temp_offset": 0.0}
+
+        def regenerate_suggestions() -> list[str]:
+            sug_state["temp_offset"] = min(1.0, sug_state["temp_offset"] + 0.15)
+            return generate_suggestions(suggestions_count, temp_offset=sug_state["temp_offset"])
+
+        return ui.run_suggestion_interactive(proposals, regenerate=regenerate_suggestions)
+
+    regen_state: dict[str, float] = {"temperature": cfg.llm_temperature}
 
     def regenerate() -> str:
-        state["temperature"] = min(1.0, state["temperature"] + 0.15)
-        return ask(temperature=state["temperature"])
+        regen_state["temperature"] = min(1.0, regen_state["temperature"] + 0.15)
+        msg = ask(temperature=regen_state["temperature"])
+        if not msg:
+            return ""
+        if cfg.commit_validate:
+            msg = validate_and_correct(msg, attempt_offset=3)
+        return msg
 
     return ui.run_interactive(message, regenerate=regenerate)
 
