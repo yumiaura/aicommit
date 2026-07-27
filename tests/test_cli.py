@@ -47,3 +47,25 @@ def test_review_only_with_findings_exits_1(isolated_home, cassette, monkeypatch,
     monkeypatch.setattr("sys.stdin.isatty", lambda: False, raising=False)
     rc = cli.main(["--review-only"])
     assert rc == 1
+
+
+def test_cli_handles_generation_errors(isolated_home, monkeypatch, capsys):
+    from aicommit.llm import OllamaError, LLMError
+    import io
+
+    # Mock stdin
+    monkeypatch.setattr("sys.stdin", io.StringIO("diff --git a/x b/x\n+a\n"))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False, raising=False)
+
+    # Mock backend to raise OllamaError during generate
+    class FakeErrorBackend:
+        def generate(self, *args, **kwargs):
+            raise OllamaError("simulated runtime error")
+
+    monkeypatch.setattr("aicommit.cli.make_backend", lambda *a, **k: FakeErrorBackend())
+
+    with pytest.raises(SystemExit) as ei:
+        cli.main(["--no-stream"])
+    assert ei.value.code == 2
+    err = capsys.readouterr().err
+    assert "error: simulated runtime error" in err

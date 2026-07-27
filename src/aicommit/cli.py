@@ -12,7 +12,7 @@ from aicommit.commands import changelog as changelog_cmd
 from aicommit.commands import config as config_cmd
 from aicommit.commands import review as review_cmd
 from aicommit.git import GitError
-from aicommit.llm import LLMError, OllamaError, make_backend
+from aicommit.llm import LLMError, OllamaError, LlamaCppError, make_backend
 from aicommit.prompts import build_commit_prompt
 
 
@@ -154,8 +154,8 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
     def ask(temperature: float | None = None) -> str:
         try:
             return backend.generate(prompt, temperature=temperature)
-        except OllamaError as e:
-            raise SystemExit(emit_ollama_error(e)) from e
+        except LLMError as e:
+            raise SystemExit(emit_error(e)) from e
 
     def ask_stream() -> str:
         chunks: list[str] = []
@@ -164,8 +164,8 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
                 chunks.append(piece)
                 sys.stdout.write(piece)
                 sys.stdout.flush()
-        except OllamaError as e:
-            raise SystemExit(emit_ollama_error(e)) from e
+        except LLMError as e:
+            raise SystemExit(emit_error(e)) from e
         sys.stdout.write("\n")
         return "".join(chunks).strip()
 
@@ -213,9 +213,9 @@ def commit_flow(args: argparse.Namespace, cfg: cfgmod.Config) -> int:
     return ui.run_interactive(message, regenerate=regenerate)
 
 
-def emit_ollama_error(e: OllamaError) -> int:
+def emit_error(e: LLMError) -> int:
     sys.stderr.write(f"error: {e}\n")
-    if "cannot reach" in str(e):
+    if isinstance(e, OllamaError) and "cannot reach" in str(e):
         sys.stderr.write("hint: is `ollama serve` running and reachable?\n")
     return 2
 

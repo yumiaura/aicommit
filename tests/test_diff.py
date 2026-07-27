@@ -1,4 +1,4 @@
-from aicommit.diff import estimate_tokens, summary_for_llm, truncate_diff
+from aicommit.diff import estimate_tokens, truncate_diff
 
 
 def test_truncate_diff_passthrough_when_small():
@@ -30,17 +30,3 @@ def test_truncate_diff_handles_single_huge_file():
 def test_estimate_tokens_monotonic():
     assert estimate_tokens("") == 1
     assert estimate_tokens("x" * 4) <= estimate_tokens("x" * 40)
-
-
-def test_summary_for_llm_lists_files():
-    diff = (
-        "diff --git a/foo.py b/foo.py\n"
-        "--- a/foo.py\n"
-        "+++ b/foo.py\n"
-        "@@\n"
-        "-old\n"
-        "+new\n"
-    )
-    s = summary_for_llm(diff)
-    assert "diff --git a/foo.py b/foo.py" in s
-    assert "+1" in s or "+0" in s

@@ -4,7 +4,7 @@ from __future__ import annotations
 import sys
 
 from aicommit.config import Config
-from aicommit.llm import OllamaError, make_backend
+from aicommit.llm import LLMError, OllamaError, make_backend
 
 REVIEW_PROMPT = """You are a senior engineer reviewing the staged diff for likely defects.
 
@@ -46,7 +46,7 @@ def run(diff: str, *, cfg: Config, review_only: bool = False) -> int:
         return 2
     try:
         raw = backend.generate(REVIEW_PROMPT.format(diff=diff), temperature=0.0).strip()
-    except OllamaError as e:
+    except LLMError as e:
         sys.stderr.write(f"error: {e}\n")
         return 2
 
