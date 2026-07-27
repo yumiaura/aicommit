@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import socket
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
@@ -90,7 +89,7 @@ class OllamaBackend:
             detail = e.read().decode("utf-8", "replace")
             raise OllamaError(f"Ollama HTTP {e.code}: {detail}") from e
 
-        except (urllib.error.URLError, socket.timeout, TimeoutError) as e:
+        except (urllib.error.URLError, TimeoutError) as e:
             raise OllamaError(f"Cannot reach Ollama at {self.url}: {e}") from e
 
         except json.JSONDecodeError as e:
@@ -136,5 +135,5 @@ class OllamaBackend:
             detail = e.read().decode("utf-8", "replace")
             raise OllamaError(f"Ollama HTTP {e.code}: {detail}") from e
 
-        except (urllib.error.URLError, socket.timeout, TimeoutError) as e:
+        except (urllib.error.URLError, TimeoutError) as e:
             raise OllamaError(f"Cannot reach Ollama at {self.url}: {e}") from e

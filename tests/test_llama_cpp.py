@@ -1,6 +1,7 @@
-import pytest
 import sys
 from unittest.mock import MagicMock
+
+import pytest
 
 
 @pytest.fixture
@@ -97,10 +98,10 @@ def test_make_backend_name_normalization(monkeypatch, tmp_path):
 
 
 def test_make_backend_llama_cpp_import_error(monkeypatch):
-    from aicommit.llm import make_backend, LLMError
-
     # Force ImportError when importing aicommit.llm.llama_cpp
     import builtins
+
+    from aicommit.llm import LLMError, make_backend
     original_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):

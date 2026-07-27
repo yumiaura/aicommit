@@ -74,7 +74,7 @@ def truncate_diff(diff: str, max_tokens: int) -> tuple[str, bool]:
 
     kept = 0
 
-    for chunk, length in zip(file_chunks, lengths):
+    for chunk, length in zip(file_chunks, lengths, strict=True):
         if used + length > budget_chars:
             break
 

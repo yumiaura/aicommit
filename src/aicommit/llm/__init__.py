@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Protocol
 
-from aicommit.llm.exceptions import LLMError, LlamaCppError, OllamaError
+from aicommit.llm.exceptions import LlamaCppError, LLMError, OllamaError
 from aicommit.llm.ollama import OllamaBackend
 
 
 class Backend(Protocol):
     def generate(self, prompt: str, *, temperature: float | None = None) -> str: ...
-    def stream(self, prompt: str, *, temperature: float | None = None): ...
+    def stream(self, prompt: str, *, temperature: float | None = None) -> Iterator[str]: ...
 
 
 def make_backend(

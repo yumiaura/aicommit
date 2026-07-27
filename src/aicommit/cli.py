@@ -12,7 +12,7 @@ from aicommit.commands import changelog as changelog_cmd
 from aicommit.commands import config as config_cmd
 from aicommit.commands import review as review_cmd
 from aicommit.git import GitError
-from aicommit.llm import LLMError, OllamaError, LlamaCppError, make_backend
+from aicommit.llm import LLMError, OllamaError, make_backend
 from aicommit.prompts import build_commit_prompt
 
 

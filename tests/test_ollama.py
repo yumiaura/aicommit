@@ -1,5 +1,6 @@
+
 import pytest
-import socket
+
 from aicommit.llm.ollama import OllamaBackend, OllamaError
 
 
@@ -33,7 +34,7 @@ def test_regenerate_uses_different_temperature(cassette):
 
 def test_ollama_socket_timeout(monkeypatch):
     def fake_urlopen(req, timeout=None):
-        raise socket.timeout("timed out")
+        raise TimeoutError("timed out")
     monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
     backend = OllamaBackend(url="http://test", model="m")
     with pytest.raises(OllamaError) as exc_info:

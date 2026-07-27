@@ -50,8 +50,9 @@ def test_review_only_with_findings_exits_1(isolated_home, cassette, monkeypatch,
 
 
 def test_cli_handles_generation_errors(isolated_home, monkeypatch, capsys):
-    from aicommit.llm import OllamaError, LLMError
     import io
+
+    from aicommit.llm import OllamaError
 
     # Mock stdin
     monkeypatch.setattr("sys.stdin", io.StringIO("diff --git a/x b/x\n+a\n"))

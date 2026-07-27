@@ -6,7 +6,7 @@ import sys
 
 from aicommit import git
 from aicommit.config import Config
-from aicommit.llm import LLMError, OllamaError, make_backend
+from aicommit.llm import LLMError, make_backend
 
 # Keep a Changelog buckets, in the order they should appear.
 BUCKETS = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"]
