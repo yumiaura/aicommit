@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 500" font-family="SF Mono, Menlo, DejaVu Sans Mono, Consolas, Liberation Mono, monospace" font-size="13">
+  <!-- terminal window -->
+  <rect x="0" y="0" width="720" height="500" rx="8" fill="#1e1e2e"/>
+  <rect x="0" y="0" width="720" height="28" rx="8" fill="#181825"/>
+  <rect x="0" y="20" width="720" height="8" fill="#181825"/>
+  <!-- mac-style dots -->
+  <circle cx="18" cy="14" r="5.5" fill="#f38ba8"/>
+  <circle cx="36" cy="14" r="5.5" fill="#f9e2af"/>
+  <circle cx="54" cy="14" r="5.5" fill="#a6e3a1"/>
+  <text x="360" y="18" text-anchor="middle" fill="#6c7086" font-size="11">aicommit — demo</text>
+
+  <!-- style shortcuts -->
+  <style>
+    .fg   { fill: #cdd6f4; }
+    .dim  { fill: #6c7086; }
+    .bold { fill: #cdd6f4; font-weight: 700; }
+    .grn  { fill: #a6e3a1; }
+    .red  { fill: #f38ba8; }
+    .yel  { fill: #f9e2af; }
+    .cyn  { fill: #94e2d5; }
+    .mag  { fill: #cba6f7; }
+  </style>
+
+  <!-- prompt: $ git add -A && git aicommit -->
+  <g transform="translate(16 54)">
+    <text><tspan class="grn">$</tspan> <tspan class="fg">git add -A &amp;&amp; git aicommit</tspan></text>
+  </g>
+
+  <!-- staged changes banner -->
+  <text x="16" y="82" class="dim">────────────────────────────────────────────────────────</text>
+  <text x="16" y="102" class="bold">staged changes:</text>
+  <text x="16" y="122" class="dim">────────────────────────────────────────────────────────</text>
+  <text x="16" y="142" class="fg"> parser.py | 2 <tspan class="grn">++</tspan></text>
+  <text x="16" y="162" class="fg"> 1 file changed, 2 insertions(+)</text>
+
+  <!-- proposed commit banner -->
+  <text x="16" y="200" class="dim">────────────────────────────────────────────────────────</text>
+  <text x="16" y="220" class="bold">proposed commit message:</text>
+  <text x="16" y="240" class="dim">────────────────────────────────────────────────────────</text>
+  <text x="16" y="264" class="fg"><tspan class="mag">fix</tspan>(<tspan class="cyn">parser</tspan>): handle empty input gracefully</text>
+  <text x="16" y="298" class="fg">when input text is None, empty, or contains only</text>
+  <text x="16" y="316" class="fg">whitespace, return empty list instead of processing</text>
+  <text x="16" y="334" class="fg">invalid input</text>
+  <text x="16" y="358" class="dim">────────────────────────────────────────────────────────</text>
+
+  <!-- interactive prompt -->
+  <text x="16" y="402" class="fg">[ <tspan class="grn">Enter</tspan> = commit · <tspan class="yel">e</tspan> = edit · <tspan class="cyn">r</tspan> = regenerate · <tspan class="red">q</tspan> = quit ]</text>
+  <text x="16" y="428" class="fg">&gt; <tspan class="fg">▎</tspan></text>
+</svg>

@@ -7,12 +7,34 @@ into per-version sections by hand.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.1] — 2026-07-27
 
-### Added
-- README: an "Alternatives" section comparing aicommit to similar tools
-  (aicommits, opencommit, gptcommit, CodeGPT) and explaining its local-first,
-  zero-dependency niche.
+### Changed
+- Ollama backend now handles socket-level timeouts, invalid-JSON responses,
+  and Ollama API `error`-in-body payloads with clean `OllamaError`s instead
+  of raw tracebacks.
+- Introduced a shared `LLMError` base with `OllamaError` and `LlamaCppError`
+  as subclasses; CLI catches the base so both backends surface errors
+  through the same code path.
+- llama-cpp backend hardened with input validation, safer failure paths,
+  and defensive `.get()` access on model output.
+- `make_backend()` accepts `llama-cpp` / `llamacpp` / `llama_cpp`
+  interchangeably and returns a typed `Backend` `Protocol`.
+- README: added an "Alternatives" section comparing aicommit to similar
+  tools and explaining its local-first, zero-dependency niche.
+- README: tighter structure with badges, TOC, requirements section and
+  a reference table for config keys.
+- README: SVG terminal demo replaces the earlier text sample block.
+
+### Removed
+- Unused `summary_for_llm` helper in `diff.py`.
+
+### Fixed
+- `zip(file_chunks, lengths)` in `truncate_diff` now uses `strict=True`.
+- `Backend.stream` protocol declares `-> Iterator[str]` matching the
+  concrete backends.
+
+Thanks to @aarvsn for the backend hardening (#6).
 
 ## [1.0.0] — 2025-12-18
 

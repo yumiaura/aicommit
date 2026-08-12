@@ -1,23 +1,44 @@
 # 🤖 aicommit
 
-> **AI commit messages from your local LLM.**
-> Reads `git diff --staged`, asks Ollama for a clean Conventional Commit, commits.
+Generate Conventional Commit messages from your staged diff, powered by a local LLM. No API keys. No cloud.
 
-Everything runs offline. No API keys, no data leaves the box.
-
----
-
-## ✨ Features
-
-- 📝 Generates **Conventional Commit** messages from staged changes
-- 🤖 Powered by a **local LLM** via Ollama (or `llama-cpp-python`)
-- ✍️ Opens the proposal in `$EDITOR` for a quick approval / edit / regenerate loop
-- 📓 `changelog` subcommand: summarizes a tag range into a `CHANGELOG.md` entry
-- 🔌 Installs as a `git` subcommand — call it as `git aicommit`
+[![CI](https://github.com/yumiaura/AICommit/actions/workflows/ci.yml/badge.svg)](https://github.com/yumiaura/AICommit/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 
 ---
 
-## 🚀 Quick start
+## Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Quick start](#quick-start)
+- [Configuration](#configuration)
+- [Alternatives](#alternatives)
+- [License](#license)
+
+---
+
+## Features
+
+- Generates **Conventional Commit** messages from staged changes
+- Powered by a **local LLM** via Ollama (or `llama-cpp-python`)
+- Opens the proposal in `$EDITOR` for a quick approval / edit / regenerate loop
+- `changelog` subcommand: summarizes a tag range into a `CHANGELOG.md` entry
+- Installs as a `git` subcommand — call it as `git aicommit`
+
+---
+
+## Requirements
+
+- Python **3.11+**
+- An LLM backend, either:
+  - **[Ollama](https://ollama.com)** running locally or over the network (default), or
+  - **`llama-cpp-python`** with a local GGUF model — `pip install 'aicommit[llama-cpp]'`
+
+---
+
+## Quick start
 
 ```bash
 # 1. install a model in Ollama (any chat-instruct model works)
@@ -33,18 +54,31 @@ git aicommit
 
 Sample interaction:
 
+![git aicommit demo](docs/demo.svg)
+
+<details>
+<summary>Text fallback (if the image above doesn't render)</summary>
+
 ```text
+────────────────────────────────────────────────────────
+staged changes:
+────────────────────────────────────────────────────────
+ parser.py | 2 ++
+ 1 file changed, 2 insertions(+)
 ────────────────────────────────────────────────────────
 proposed commit message:
 ────────────────────────────────────────────────────────
 fix(parser): handle empty input gracefully
 
-- return [] instead of raising on whitespace-only files
-- add regression test for the empty-file case
+when input text is None, empty, or contains only
+whitespace, return empty list instead of processing
+invalid input
 ────────────────────────────────────────────────────────
 
 [ Enter = commit · e = edit · r = regenerate · q = quit ]
 ```
+
+</details>
 
 Changelog mode:
 
@@ -64,7 +98,7 @@ aicommit --print | clip                # Windows (Git Bash / WSL)
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 Quickest way to get a config file:
 
@@ -72,30 +106,27 @@ Quickest way to get a config file:
 aicommit config
 ```
 
-That creates `~/.config/aicommit/config.toml` from the default template
-(if it doesn't exist yet) and opens it in `$EDITOR` — falling back to
-`$VISUAL`, then `nano`. Re-running just re-opens the file; your existing
-values are never clobbered.
+Creates `~/.config/aicommit/config.toml` from the default template (if
+missing) and opens it in `$EDITOR` (fallback `$VISUAL` → `nano`). Existing
+files are never clobbered.
 
-The file looks like this:
+**Config keys** — all optional, defaults shown:
 
-```toml
-[llm]
-backend     = "ollama"            # ollama | llama-cpp
-model       = "qwen2.5-coder:7b"
-url         = "http://localhost:11434"
-temperature = 0.1
-max_tokens  = 512
+| Section | Key | Env var | Default | Description |
+|---|---|---|---|---|
+| `llm` | `backend` | `AICOMMIT_BACKEND` | `ollama` | `ollama` or `llama-cpp` |
+| `llm` | `model` | `AICOMMIT_MODEL` | `qwen2.5-coder:7b` | Ollama tag or GGUF file path |
+| `llm` | `url` | `AICOMMIT_OLLAMA_URL` | `http://localhost:11434` | Ollama base URL |
+| `llm` | `temperature` | `AICOMMIT_TEMPERATURE` | `0.1` | Sampling temperature |
+| `llm` | `max_tokens` | `AICOMMIT_MAX_TOKENS` | `512` | Max tokens in response |
+| `commit` | `style` | `AICOMMIT_STYLE` | `conventional` | `conventional` or `plain` |
+| `commit` | `include_body` | `AICOMMIT_INCLUDE_BODY` | `true` | Emit a body under the subject |
+| `review` | `enabled` | — | `false` | Run `--review` on every commit |
+| `changelog` | `skip_conventional` | — | `true` | Use the deterministic fast path when possible |
 
-[commit]
-style        = "conventional"     # conventional | plain
-include_body = true
-```
+**Precedence:** defaults → `~/.config/aicommit/config.toml` → `<repo>/.aicommit.toml` → env vars → CLI flags.
 
-Environment variables override the file (`AICOMMIT_MODEL=...`), and CLI
-flags override env. Per-repo overrides go in `<repo>/.aicommit.toml`.
-
-Useful flags:
+**CLI flags** — all override config:
 
 ```text
 aicommit [--backend {ollama,llama-cpp}] [--model M] [--url URL]
@@ -109,18 +140,7 @@ aicommit config
 
 ---
 
-## 📦 Stack
-
-- `ollama` HTTP API via stdlib `urllib` (or `llama-cpp-python` for in-process inference)
-- `subprocess` to call `git`
-- `argparse` for the CLI
-- `tomllib` (Python 3.11+) for config
-
-Zero runtime dependencies for the default Ollama backend.
-
----
-
-## 🔀 Alternatives
+## Alternatives
 
 aicommit lives in a crowded space, and that's fine — these are all good:
 
@@ -133,21 +153,16 @@ aicommit lives in a crowded space, and that's fine — these are all good:
 
 **Why aicommit, then?** A few deliberate choices:
 
-- **Local-first, offline by default** — Ollama or in-process `llama-cpp`; no
-  cloud provider to configure, no API keys, nothing leaves your machine.
-- **Zero runtime dependencies** for the Ollama backend — just the Python
-  standard library, so it's easy to audit and quick to install.
+- **Local-first, offline by default** — Ollama or in-process `llama-cpp`; no cloud provider to configure, no API keys, nothing leaves your machine.
+- **Zero runtime dependencies** for the Ollama backend — just the Python standard library (`urllib` for HTTP, `subprocess` for git, `argparse` for the CLI, `tomllib` for config), so it's easy to audit and quick to install.
 - **Conventional Commits** with an approve / edit / regenerate loop in `$EDITOR`.
 - **Changelog mode** — summarize a tag range straight into `CHANGELOG.md`.
 - Installs as a native `git aicommit` subcommand.
 
-Want the biggest ecosystem? Use aicommits or opencommit. Want a tiny, auditable,
-Python-native, fully-offline tool? That's aicommit.
+Want the biggest ecosystem? Use aicommits or opencommit. Want a tiny, auditable, Python-native, fully-offline tool? That's aicommit.
 
 ---
 
-## 📄 License
+## License
 
-[MIT](LICENSE).
-
-Author: [@yumiaura](https://github.com/yumiaura)
+[MIT](LICENSE) · [@yumiaura](https://github.com/yumiaura)

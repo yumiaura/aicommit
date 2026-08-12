@@ -1,6 +1,6 @@
 [project]
 name = "aicommit"
-version = "1.0.0"
+version = "1.0.1"
 description = "AI commit messages from your local LLM"
 readme = "README.md"
 requires-python = ">=3.11"

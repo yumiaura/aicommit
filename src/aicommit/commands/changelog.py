@@ -6,7 +6,7 @@ import sys
 
 from aicommit import git
 from aicommit.config import Config
-from aicommit.llm import OllamaError, make_backend
+from aicommit.llm import LLMError, make_backend
 
 # Keep a Changelog buckets, in the order they should appear.
 BUCKETS = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security"]
@@ -157,7 +157,7 @@ def build_body(
     prompt = CHANGELOG_PROMPT.format(commits=format_commits(unknowns))
     try:
         llm_body = backend.generate(prompt, temperature=0.1).strip()
-    except OllamaError as e:
+    except LLMError as e:
         sys.stderr.write(f"error: {e}\n")
         return None
     if not llm_body:

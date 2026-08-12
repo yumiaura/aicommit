@@ -1,11 +1,17 @@
-"""LLM backends. v0.1+: Ollama HTTP. v0.6+: optional llama-cpp-python."""
+"""LLM backend factory."""
+
 from __future__ import annotations
 
-from aicommit.llm.ollama import OllamaBackend, OllamaError
+from collections.abc import Iterator
+from typing import Protocol
+
+from aicommit.llm.exceptions import LlamaCppError, LLMError, OllamaError
+from aicommit.llm.ollama import OllamaBackend
 
 
-class LLMError(RuntimeError):
-    """Raised when no usable backend can be constructed."""
+class Backend(Protocol):
+    def generate(self, prompt: str, *, temperature: float | None = None) -> str: ...
+    def stream(self, prompt: str, *, temperature: float | None = None) -> Iterator[str]: ...
 
 
 def make_backend(
@@ -15,21 +21,42 @@ def make_backend(
     model: str,
     temperature: float,
     max_tokens: int = 512,
-):
+) -> Backend:
+    backend = backend.strip().lower()
+
     if backend == "ollama":
-        return OllamaBackend(url=url, model=model, temperature=temperature, max_tokens=max_tokens)
-    if backend == "llama-cpp":
+        return OllamaBackend(
+            url=url,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+
+    if backend in {"llama-cpp", "llamacpp", "llama_cpp"}:
         try:
             from aicommit.llm.llama_cpp import LlamaCppBackend
-            return LlamaCppBackend(model=model, temperature=temperature, max_tokens=max_tokens)
-        except ImportError as e:
+
+            return LlamaCppBackend(
+                model=model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+        except (RuntimeError, FileNotFoundError, ImportError) as e:
             raise LLMError(
-                "llama-cpp backend requested but llama-cpp-python is not installed; "
-                "install with `pip install 'aicommit[llama-cpp]'`"
+                f"Failed to initialise llama-cpp backend: {e}"
             ) from e
-        except (RuntimeError, FileNotFoundError) as e:
-            raise LLMError(f"llama-cpp backend failed to initialise: {e}") from e
-    raise LLMError(f"unknown backend: {backend!r}")
+
+    raise LLMError(
+        f"Unknown backend {backend!r}. "
+        "Supported backends are: 'ollama', 'llama-cpp'."
+    )
 
 
-__all__ = ["OllamaBackend", "OllamaError", "LLMError", "make_backend"]
+__all__ = [
+    "Backend",
+    "LLMError",
+    "LlamaCppError",
+    "OllamaBackend",
+    "OllamaError",
+    "make_backend",
+]

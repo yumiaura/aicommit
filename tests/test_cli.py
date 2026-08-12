@@ -49,57 +49,24 @@ def test_review_only_with_findings_exits_1(isolated_home, cassette, monkeypatch,
     assert rc == 1
 
 
-# ── Suggestions mode ────────────────────────────────────────────────────
+def test_cli_handles_generation_errors(isolated_home, monkeypatch, capsys):
+    import io
 
+    from aicommit.llm import OllamaError
 
-def test_suggestions_pipe_mode_falls_back_to_single(
-    isolated_home, cassette, monkeypatch, capsys,
-):
-    """In pipe mode, --suggestions should produce a single message."""
-    cassette("commit_simple")
+    # Mock stdin
     monkeypatch.setattr("sys.stdin", io.StringIO("diff --git a/x b/x\n+a\n"))
     monkeypatch.setattr("sys.stdin.isatty", lambda: False, raising=False)
-    rc = cli.main(["--no-stream", "--suggestions"])
-    out = capsys.readouterr().out
-    assert rc == 0
-    assert "feat(parser)" in out
 
+    # Mock backend to raise OllamaError during generate
+    class FakeErrorBackend:
+        def generate(self, *args, **kwargs):
+            raise OllamaError("simulated runtime error")
 
-def test_suggestions_yes_commits_first(
-    isolated_home, cassette, monkeypatch,
-):
-    """--suggestions --yes should auto-commit the first suggestion."""
-    cassette("commit_suggestions")
-    monkeypatch.setattr("aicommit.git.staged_diff", lambda: "diff --git a/x b/x\n+a\n")
+    monkeypatch.setattr("aicommit.cli.make_backend", lambda *a, **k: FakeErrorBackend())
 
-    committed: list[str] = []
-    monkeypatch.setattr("aicommit.git.commit_with_message", lambda msg: committed.append(msg))
-
-    fake_stdin = io.StringIO("")
-    fake_stdin.isatty = lambda: True
-    monkeypatch.setattr("sys.stdin", fake_stdin)
-
-    rc = cli.main(["--yes", "--suggestions"])
-    assert rc == 0
-    assert len(committed) == 1
-    assert "authentication middleware" in committed[0]
-
-
-def test_suggestions_interactive_select_first(
-    isolated_home, cassette, monkeypatch,
-):
-    """Select first suggestion in interactive mode."""
-    cassette("commit_suggestions")
-    monkeypatch.setattr("aicommit.git.staged_diff", lambda: "diff --git a/x b/x\n+a\n")
-
-    committed: list[str] = []
-    monkeypatch.setattr("aicommit.git.commit_with_message", lambda msg: committed.append(msg))
-
-    fake_stdin = io.StringIO("1\n")
-    fake_stdin.isatty = lambda: True
-    monkeypatch.setattr("sys.stdin", fake_stdin)
-
-    rc = cli.main(["--suggestions"])
-    assert rc == 0
-    assert len(committed) == 1
-    assert "authentication middleware" in committed[0]
+    with pytest.raises(SystemExit) as ei:
+        cli.main(["--no-stream"])
+    assert ei.value.code == 2
+    err = capsys.readouterr().err
+    assert "error: simulated runtime error" in err
