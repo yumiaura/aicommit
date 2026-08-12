@@ -1,0 +1,10 @@
+[
+  {
+    "endpoint": "/api/generate",
+    "response": "add login page"
+  },
+  {
+    "endpoint": "/api/generate",
+    "response": "feat(auth): add login page"
+  }
+]

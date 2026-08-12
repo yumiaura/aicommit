@@ -21,8 +21,12 @@ temperature = 0.1                       # lower = more deterministic, less hallu
 max_tokens  = 512
 
 [commit]
-style        = "conventional"           # conventional | plain
-include_body = true
+style                = "conventional"           # conventional | plain
+include_body         = true
+validate             = false                    # auto-validate & correct on --validate
+validate_max_retries = 2
+suggestions          = false                    # show multiple suggestions to pick from
+suggestions_count    = 3
 
 [review]
 enabled = false                         # run --review on every commit by default?
