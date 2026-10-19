@@ -21,6 +21,7 @@ dependencies = []
 
 [project.optional-dependencies]
 llama-cpp = ["llama-cpp-python>=0.2.0"]
+gui = ["PySide6>=6.5,<7"]
 dev = [
     "pytest>=7.0",
     "ruff>=0.4",
@@ -30,6 +31,7 @@ dev = [
 [project.scripts]
 aicommit = "aicommit.cli:main"
 git-aicommit = "aicommit.cli:main"
+aicommit-gui = "aicommit.gui:main"
 
 [project.urls]
 Homepage   = "https://github.com/yumiaura/AICommit"

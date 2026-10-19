@@ -1,4 +1,5 @@
 """Terminal UI: proposal rendering + the [Enter/e/r/q] interactive loop."""
+
 from __future__ import annotations
 
 import os
@@ -22,10 +23,29 @@ class Ansi:
 
 
 def use_color() -> bool:
-    """Honour NO_COLOR (https://no-color.org) and only colorize on a TTY."""
-    if os.environ.get("NO_COLOR"):
+    """Only emit ANSI if stdout can interpret it, including legacy PowerShell."""
+    # AICOMMIT_GUI_WINDOWS_V1
+    if os.environ.get("NO_COLOR") or not sys.stdout.isatty():
         return False
-    return sys.stdout.isatty()
+    if os.name != "nt":
+        return True
+    try:
+        import ctypes
+
+        kernel = ctypes.windll.kernel32
+        kernel.GetStdHandle.restype = ctypes.c_void_p
+        handle = kernel.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        if not handle:
+            return False
+        mode = ctypes.c_ulong()
+        if not kernel.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        vt = 0x0004  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+        if mode.value & vt:
+            return True
+        return bool(kernel.SetConsoleMode(handle, mode.value | vt))
+    except (OSError, AttributeError, ValueError):
+        return False
 
 
 def colored(s: str, color: str) -> str:
