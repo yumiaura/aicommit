@@ -19,14 +19,28 @@ def estimate_tokens(text: str) -> int:
     return max(1, (len(text) + CHARS_PER_TOKEN - 1) // CHARS_PER_TOKEN)
 
 
+def _truncate_prefix(diff: str, budget_chars: int) -> str:
+    """Reserve a marker before retaining a prefix, including for tiny budgets."""
+    # The largest possible skipped count reserves enough room even when the
+    # final count has fewer digits. Tiny budgets still retain an explicit mark.
+    marker = f"\n[... truncated {len(diff)} chars ...]\n"
+    if len(marker) > budget_chars:
+        marker = "..."
+        return diff[: budget_chars - len(marker)] + marker
+
+    kept = budget_chars - len(marker)
+    skipped = len(diff) - kept
+    return diff[:kept] + f"\n[... truncated {skipped} chars ...]\n"
+
+
 def truncate_diff(diff: str, max_tokens: int) -> tuple[str, bool]:
     """Trim a diff so its estimated token count fits within `max_tokens`.
 
     Strategy:
-    - Keep the preamble (if any).
-    - Add as many whole file diffs as fit.
-    - If none fit, partially include the first file.
-    - Always append a truncation marker when content was removed.
+    - Keep the preamble when it fits.
+    - Add as many whole file diffs as fit, including the truncation marker.
+    - If none fit, partially include the input's prefix.
+    - Always mark removed content; use `...` when the detailed marker cannot fit.
 
     Returns:
         (trimmed_diff, was_truncated)
@@ -43,72 +57,31 @@ def truncate_diff(diff: str, max_tokens: int) -> tuple[str, bool]:
         return diff, False
 
     files = FILE_HEADER.split(diff)
-
-    preamble = files[0] if files else ""
-    file_chunks = files[1:] if len(files) > 1 else []
-
-    if not file_chunks:
-        trimmed = diff[:budget_chars]
-        skipped = len(diff) - budget_chars
-        return (
-            f"{trimmed}\n[... truncated {skipped} chars ...]\n",
-            True,
-        )
-
-    if len(preamble) >= budget_chars:
-        skipped = len(diff) - budget_chars
-        return (
-            preamble[:budget_chars]
-            + f"\n[... truncated {skipped} chars ...]\n",
-            True,
-        )
-
-    lengths = [len(chunk) for chunk in file_chunks]
-
-    out: list[str] = []
-    used = 0
-
-    if preamble:
-        out.append(preamble)
-        used = len(preamble)
-
+    preamble = files[0]
+    file_chunks = files[1:]
+    out = [preamble]
+    used = len(preamble)
     kept = 0
 
-    for chunk, length in zip(file_chunks, lengths, strict=True):
-        if used + length > budget_chars:
+    for chunk in file_chunks:
+        next_used = used + len(chunk)
+        skipped_files = len(file_chunks) - kept - 1
+        skipped_chars = len(diff) - next_used
+        marker = (
+            f"\n[... truncated {skipped_files} more file(s), ~{skipped_chars} chars ...]\n"
+        )
+        if next_used + len(marker) > budget_chars:
             break
-
         out.append(chunk)
-        used += length
+        used = next_used
         kept += 1
 
-    if kept > 0:
+    if kept:
         skipped_files = len(file_chunks) - kept
-        skipped_chars = sum(lengths[kept:])
-
+        skipped_chars = len(diff) - used
         out.append(
             f"\n[... truncated {skipped_files} more file(s), ~{skipped_chars} chars ...]\n"
         )
         return "".join(out), True
 
-    first = file_chunks[0]
-    keep_chars = max(0, budget_chars - used)
-
-    out.append(first[:keep_chars])
-
-    skipped_in_file = len(first) - keep_chars
-    extra_files = len(file_chunks) - 1
-    extra_chars = sum(lengths[1:])
-
-    msg = (
-        f"\n[... truncated {skipped_in_file} chars within this file"
-    )
-
-    if extra_files:
-        msg += f" + {extra_files} more file(s), ~{extra_chars} chars"
-
-    msg += " ...]\n"
-
-    out.append(msg)
-
-    return "".join(out), True
+    return _truncate_prefix(diff, budget_chars), True
