@@ -7,6 +7,12 @@ into per-version sections by hand.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 the project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- Diff truncation now includes its marker in the token budget, with a compact
+  marker for tiny budgets. Whole-file trimming and unchanged small diffs are retained.
+
 ## [1.0.1] — 2026-07-27
 
 ### Changed
